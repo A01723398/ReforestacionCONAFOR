@@ -333,6 +333,7 @@ def real_planting(necesidad, lista_plantas, lista_orden, dict_orden,
     siguiente_poligono = ""
     dict_a_plantar = {i: 0 for i in lista_plantas}
     tiempo = 0
+    distancia_recorrida = 0
 
     while True:
         # Verifica si terminamos
@@ -353,6 +354,7 @@ def real_planting(necesidad, lista_plantas, lista_orden, dict_orden,
             if (tiempo + tiempo_al_siguiente + tiempo_minimo_permitido <= tiempo_jornada):
                 poligono_actual = siguiente_poligono
                 tiempo += tiempo_al_siguiente
+                distancia_recorrida += dist_al_siguiente
             else:
                 break  # No hay tiempo para salir siquiera
         else:
@@ -376,6 +378,7 @@ def real_planting(necesidad, lista_plantas, lista_orden, dict_orden,
                         tiempo_al_siguiente = tiempo_x_km * dist_al_siguiente
                         if (tiempo + tiempo_al_siguiente + tiempo_minimo_permitido <= tiempo_jornada):
                             tiempo += tiempo_al_siguiente
+                            distancia_recorrida += dist_al_siguiente
                             poligono_actual = siguiente_poligono
                         else:
                             break  # No alcanza tiempo para siguiente
@@ -388,6 +391,7 @@ def real_planting(necesidad, lista_plantas, lista_orden, dict_orden,
                     tiempo_al_siguiente = df_dist.loc[poligono_actual, siguiente_poligono]
                     if (tiempo + tiempo_al_siguiente + tiempo_minimo_permitido <= tiempo_jornada):
                         dist_al_siguiente = df_dist.loc[base, siguiente_poligono]
+                        distancia_recorrida += dist_al_siguiente
                         tiempo_al_siguiente = tiempo_x_km * dist_al_siguiente
                         poligono_actual = siguiente_poligono
                     else:
@@ -395,7 +399,7 @@ def real_planting(necesidad, lista_plantas, lista_orden, dict_orden,
                 else:
                     break  # Nada más que hacer hoy
 
-    return dict_a_plantar, necesidad, active_order_dicts
+    return dict_a_plantar, necesidad, active_order_dicts, distancia_recorrida
 
     """
     ## Untested Functions
@@ -858,8 +862,17 @@ if __name__ == "__main__":
     dias, pedido_num = plan_days(dias, planned_date, initial_days_to_plan, pedido_num, start_date, denvio, dreposo, dplantable)
     planned_date += timedelta(days=initial_days_to_plan)
 
+    #Conteos
+    conteo_dias = 0
+    conteo_dinero = 0
+    costo_km = 10
+
     # Bucle principal de planeación
     while lista_poligonos != lista_poligonos_completados:
+
+        conteo_dias += 1
+        distancia_recorrida_hoy = 0
+        total_planting_cost = 0
 
         # Reset variables per day
         sql_grupo_orden_pedir = 0
@@ -960,7 +973,7 @@ if __name__ == "__main__":
 
             if dias[current_date]['info']['day_status'] == "Dia Laboral":
                 jornada_real = tiempo_jornada * 0.5 if dias[current_date]['info']['day_name'] == "Sabado" else tiempo_jornada
-                day_plant_dict, real_poligons, active_order_dicts = real_planting(
+                day_plant_dict, real_poligons, active_order_dicts, distancia_recorrida_hoy = real_planting(
                     real_poligons,
                     lista_plantas,
                     farthest_poligon_list,
@@ -980,6 +993,12 @@ if __name__ == "__main__":
         sql_inventario_final = determinar_inventario(active_order_dicts, lista_plantas)
         sql_dia_resumen = "Falta implementar..."
         total_planted = sum(day_plant_dict.values())
+        costo_diario_de_plantar = 20*total_planted
+        costo_diario_de_traslado = costo_km * distancia_recorrida_hoy
+
+        conteo_dinero += costo_diario_de_traslado
+        conteo_dinero += total_planting_cost #Pedidos
+        conteo_dinero += costo_diario_de_plantar #Plantado
 
         insertar_informacion_dia(
             current_date,
@@ -1000,6 +1019,7 @@ if __name__ == "__main__":
             conexion
         )
 
-    print("\nCompleted planting...")
-    print("Polígonos plantados:", real_poligons)
+    print("Algoritmo finalizado...")
+    print("Dias en completar:", conteo_dias)
+    print("Costo economico: $", round(conteo_dinero,2))
     conexion.close()
